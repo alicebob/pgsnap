@@ -98,9 +98,10 @@ func (s *Snap) sendError(be *pgproto3.Backend, err error) {
 }
 
 func (s *Snap) readScript(f *os.File) *pgmock.Script {
-	script := &pgmock.Script{
-		// Steps: pgmock.AcceptUnauthenticatedConnRequestSteps(),
-	}
+	// script := &pgmock.Script{
+	// Steps: pgmock.AcceptUnauthenticatedConnRequestSteps(),
+	// }
+	script := pgmock.NewScript()
 
 	scanner := bufio.NewScanner(f)
 

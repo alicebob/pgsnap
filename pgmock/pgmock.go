@@ -9,7 +9,14 @@ import (
 )
 
 type Script struct {
-	Steps []pgproto3.Message
+	Steps    []pgproto3.Message
+	Prepared map[string]string // live preprared name -> replay name
+}
+
+func NewScript() *Script {
+	return &Script{
+		Prepared: map[string]string{},
+	}
 }
 
 func (s *Script) Append(msg pgproto3.Message) {
@@ -49,13 +56,50 @@ func (s *Script) SendReply(b *pgproto3.Backend, msg pgproto3.BackendMessage) err
 
 func (s *Script) ReadMessage(b *pgproto3.Backend, want pgproto3.FrontendMessage) error {
 	msg, err := b.Receive()
-	// fmt.Printf("Read from client: %T (%s)\n", msg, err)
+	fmt.Printf("read from client: %T (%s)\n", msg, err)
 	if err != nil {
 		return err
 	}
 
 	if _, ok := msg.(*pgproto3.Terminate); ok {
 		return nil
+	}
+
+	if q, ok := msg.(*pgproto3.Parse); ok {
+		live := q.Name
+		if live != "" {
+			fmt.Printf("parse with name: %q\n", live)
+			if wq, ok := want.(*pgproto3.Parse); ok {
+				stored := wq.Name
+				s.Prepared[live] = stored
+				q.Name = stored
+				msg = q
+			}
+		}
+	}
+	if q, ok := msg.(*pgproto3.Describe); ok {
+		live := q.Name
+		if live != "" {
+			fmt.Printf("describe with name: %q -> %q\n", live, s.Prepared[live])
+			q.Name = s.Prepared[live]
+			msg = q
+		}
+	}
+	if q, ok := msg.(*pgproto3.Bind); ok {
+		live := q.PreparedStatement
+		if live != "" {
+			fmt.Printf("bind with name: %q -> %q\n", live, s.Prepared[live])
+			q.PreparedStatement = s.Prepared[live]
+			msg = q
+		}
+	}
+
+	if q, ok := want.(*pgproto3.Bind); ok {
+		if len(q.Parameters) == 0 {
+			// json decoding gives a zero-length slice, not nil.
+			q.Parameters = nil
+		}
+		want = q
 	}
 
 	// if e.any && reflect.TypeOf(msg) == reflect.TypeOf(e.want) {
