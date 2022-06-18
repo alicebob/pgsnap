@@ -12,8 +12,8 @@ func TestExec(t *testing.T) {
 		t.CompareExec(c, "CREATE TABLE foo (a int, b text)")
 		t.CompareExec(c, "INSERT INTO foo (a, b) values (42, 'hello')")
 		t.CompareExec(c, "INSERT INTO foo (a, b) values (43, 'world')")
-		// FIXME: these use prepared statements in pgx
-		// t.CompareSelect(c, 2, "SELECT a, b FROM foo ORDER BY a")
+		// t.CompareSelect(c, 2, "SELECT a, b FROM foo ORDER BY a") // prepares
+		// t.CompareSelect(c, 2, "SELECT a, b FROM foo ORDER BY a") // uses prepared
 		// t.CompareSelect(c, 0, "SELECT a, b FROM foo WHERE a = 9999")
 	}))
 
