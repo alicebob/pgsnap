@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -85,7 +86,9 @@ func (s *Snap) getFile() (*os.File, error) {
 }
 
 func (s *Snap) getFilename() string {
-	return s.t.Name() + ".txt"
+	n := s.t.Name() + ".txt"
+	n = strings.ReplaceAll(n, "/", "__")
+	return n
 }
 
 func (s *Snap) listen() net.Listener {
