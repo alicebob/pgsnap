@@ -1,13 +1,13 @@
 # pgsnap
 Fake PostgreSQL proxy for unit testing
 
+
+This code comes originally from https://github.com/egon12/pgsnap, but diverged.
+
 ## Getting Started
+
 You can download the library in by typing this command
 
-```
-go get github.com/egon12/pgsnap
-```
-and then use it in test
 ```go
 package db
 
@@ -15,29 +15,28 @@ import (
   "database/sql"
   "testing"
   
-  "github.com/egon12/pgsnap"
-  "github.com/lib/pq"
+  "github.com/alicebob/pgsnap"
 )
 
 func TestDB_GetProduct(t *testing.T) {
-  snap := pgsnap.NewSnap(t, "postgresql://user:password@localhost:5432/dbname")
-  defer snap.Finish()
+  addr := pgsnap.RunEnv(t, "postgresql://user:password@localhost:5432/dbname")
   
-  db, _ := sql.Open(snap.Addr())
+  db, _ := sql.Open(addr)
 
   p := ProductRepo{DB: db}
   p, err := p.Get(1)
-
   if err != nil {
     t.Errorf("got error: %v", err)
   }
-
   if p.ID != 1 {
     t.Error("got wrong product")
   }
 }
 
 ```
+
+Run this during development with your local postgres, and with `go test`. Commit the .txt files. During CI, or similar situations, you can use the replay when running: `PGREPLAY=1 go test`.
+
 
 ## Why we need this?
 The best way to test PostgreSQL is by using real DB. Why, usually what we pass are queries.  And the one that can predict queries is the DB itself. But it comes with a large baggage.
@@ -78,4 +77,9 @@ graph LR
 ```
 
 ### Known Bugs
+
 Inserting values which are different every run won't work. For example `time.Now()` will not work, since it's different every time, which defeats the whole idea of this package. If you need a timestamp, and you can't use PG`s `NOW()` or similar, use a fixed Go time value (`time.Date(2022, 5, 4, ...)`).
+
+The .txt files which store the commands are named after the test name. Don't run multiple pgsnap in the same test (subtests are OK).
+
+Multiple connections does not (yet) work.

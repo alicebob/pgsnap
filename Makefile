@@ -6,4 +6,4 @@ clean:
 	rm -f *.txt
 
 tidy:
-	go mod tidy
+	go mod tidy -compat=1.18
