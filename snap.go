@@ -29,6 +29,7 @@ func Run(t *testing.T, postgreURL string, replay bool) string {
 }
 
 // Same as Run(), but does replay if, and only if, PGREPLAY is set in ENV (anything non-empty)
+// This is the recommended function to use.
 func RunEnv(t *testing.T, postgreURL string) string {
 	replay := os.Getenv("PGREPLAY") != ""
 	return Run(t, postgreURL, replay)
@@ -54,38 +55,8 @@ func run(t *testing.T, postgreURL string, replay bool) *Snap {
 	return s
 }
 
-// NewSnap will create snap
-func NewSnap(t *testing.T, postgreURL string) *Snap {
-	return NewSnapWithForceWrite(t, postgreURL, false)
-}
-
-// NewSnap
-func NewSnapWithForceWrite(t *testing.T, url string, forceWrite bool) *Snap {
-	s := &Snap{
-		t:       t,
-		errchan: make(chan error, 100),
-		msgchan: make(chan string, 100),
-		done:    make(chan struct{}, 1),
-	}
-
-	s.listen()
-
-	script, err := s.getScript()
-	if s.shouldRunProxy(forceWrite, err) {
-		s.runProxy(url)
-		return s
-	}
-
-	if err != nil {
-		s.t.Fatalf("can't open file %q: %s", s.getFilename(), err)
-	}
-
-	s.runFakePostgres(script)
-	return s
-}
-
 func (s *Snap) Finish() {
-	err := s.Wait()
+	err := s.WaitFor(5 * time.Second)
 	if err != nil {
 		s.t.Helper()
 		s.t.Error(err)
@@ -94,10 +65,6 @@ func (s *Snap) Finish() {
 
 func (s *Snap) Addr() string {
 	return s.addr
-}
-
-func (s *Snap) Wait() error {
-	return s.WaitFor(5 * time.Second)
 }
 
 func (s *Snap) WaitFor(d time.Duration) error {
@@ -136,20 +103,4 @@ func (s *Snap) listen() net.Listener {
 	s.addr = fmt.Sprintf("postgres://user@%s/?sslmode=disable", s.l.Addr())
 
 	return s.l
-}
-
-func (s *Snap) shouldRunProxy(forceWrite bool, err error) bool {
-	if forceWrite == true {
-		return true
-	}
-
-	if os.IsNotExist(err) {
-		return true
-	}
-
-	if errors.Is(EmptyScript, err) {
-		return true
-	}
-
-	return false
 }

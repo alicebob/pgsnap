@@ -24,10 +24,6 @@ func (s *Snap) getScript() (*pgmock.Script, error) {
 	}
 
 	script := s.readScript(f)
-	// if len(script.Steps) < len(pgmock.AcceptUnauthenticatedConnRequestSteps())+1 {
-	// return script, EmptyScript
-	// }
-
 	return script, nil
 }
 
@@ -54,15 +50,6 @@ func (s *Snap) acceptConnForScript(script *pgmock.Script) {
 		s.waitTilSync(be)
 
 		s.sendError(be, err)
-
-		/*
-			be.Send(&pgproto3.ErrorResponse{
-				Severity:            "ERROR",
-				SeverityUnlocalized: "ERROR",
-				Message:             err.Error(),
-			})
-			be.Send(&pgproto3.ReadyForQuery{'I'})
-		*/
 
 		conn.(*net.TCPConn).SetLinger(0)
 		s.errchan <- err
@@ -97,13 +84,8 @@ func (s *Snap) sendError(be *pgproto3.Backend, err error) {
 }
 
 func (s *Snap) readScript(f *os.File) *pgmock.Script {
-	// script := &pgmock.Script{
-	// Steps: pgmock.AcceptUnauthenticatedConnRequestSteps(),
-	// }
 	script := pgmock.NewScript()
-
 	scanner := bufio.NewScanner(f)
-
 	for scanner.Scan() {
 		b := scanner.Bytes()
 		msg, err := s.unmarshal(b)
@@ -112,7 +94,6 @@ func (s *Snap) readScript(f *os.File) *pgmock.Script {
 		}
 		script.Append(msg)
 	}
-
 	return script
 }
 
@@ -120,7 +101,6 @@ func (s *Snap) unmarshal(src []byte) (pgproto3.Message, error) {
 	t := struct {
 		Type string
 	}{}
-
 	if err := json.Unmarshal(src, &t); err != nil {
 		return nil, err
 	}
