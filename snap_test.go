@@ -71,15 +71,15 @@ func runPGX(t *testing.T, addr string) {
 
 func Test_getFilename(t *testing.T) {
 	s := &Snap{t: t}
-	assert.Equal(t, "Test_getFilename.txt", s.getFilename())
+	assert.Equal(t, "pgsnap__getfilename.txt", s.getFilename())
 
 	t.Run("another test name", func(t *testing.T) {
 		s = &Snap{t: t}
-		assert.Equal(t, "Test_getFilename__another_test_name.txt", s.getFilename())
+		assert.Equal(t, "pgsnap__getfilename__another_test_name.txt", s.getFilename())
 	})
 
 	t.Run("what about this one?", func(t *testing.T) {
 		s = &Snap{t: t}
-		assert.Equal(t, "Test_getFilename__what_about_this_one?.txt", s.getFilename())
+		assert.Equal(t, "pgsnap__getfilename__what_about_this_one_.txt", s.getFilename())
 	})
 }

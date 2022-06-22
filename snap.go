@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 )
 
 type Snap struct {
@@ -87,9 +88,19 @@ func (s *Snap) getFile() (*os.File, error) {
 }
 
 func (s *Snap) getFilename() string {
-	n := s.t.Name() + ".txt"
+	n := s.t.Name()
+	n = strings.TrimPrefix(n, "Test")
 	n = strings.ReplaceAll(n, "/", "__")
-	return n
+	n = strings.Map(func(r rune) rune {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsNumber(r):
+			return r
+		default:
+			return '_'
+		}
+	}, n)
+	n = strings.ToLower(n)
+	return "pgsnap_" + n + ".txt"
 }
 
 func (s *Snap) listen() net.Listener {
