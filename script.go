@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgproto3/v2"
 
-	"github.com/egon12/pgsnap/pgmock"
+	"github.com/alicebob/pgsnap/pgmock"
 )
 
 var (

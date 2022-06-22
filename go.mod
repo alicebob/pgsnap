@@ -1,4 +1,4 @@
-module github.com/egon12/pgsnap
+module github.com/alicebob/pgsnap
 
 go 1.18
 
