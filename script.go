@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"os"
 	"time"
@@ -127,8 +126,6 @@ func (s *Snap) unmarshal(src []byte) (pgproto3.Message, error) {
 	}
 
 	var o pgproto3.Message
-
-	fmt.Printf("TYPE: %q\n", t.Type)
 
 	switch t.Type {
 	// case "AuthenticationOK":
