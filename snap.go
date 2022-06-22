@@ -20,6 +20,40 @@ type Snap struct {
 	l         net.Listener
 }
 
+// run and stop-on-cleanup.
+// If "replay" is true this will use the local replay files (and fail if there are none), otherwise it'll connect to the postgres URL.
+func Run(t *testing.T, postgreURL string, replay bool) string {
+	s := run(t, postgreURL, replay)
+	t.Cleanup(s.Finish)
+	return s.Addr()
+}
+
+// Same as Run(), but does replay if, and only if, PGREPLAY is set in ENV (anything non-empty)
+func RunEnv(t *testing.T, postgreURL string) string {
+	replay := os.Getenv("PGREPLAY") != ""
+	return Run(t, postgreURL, replay)
+}
+
+func run(t *testing.T, postgreURL string, replay bool) *Snap {
+	s := &Snap{
+		t:       t,
+		errchan: make(chan error, 1),
+		msgchan: make(chan string, 1),
+		done:    make(chan struct{}),
+	}
+	s.listen()
+	if replay {
+		script, err := s.getScript()
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.runFakePostgres(script)
+	} else {
+		s.runProxy(postgreURL)
+	}
+	return s
+}
+
 // NewSnap will create snap
 func NewSnap(t *testing.T, postgreURL string) *Snap {
 	return NewSnapWithForceWrite(t, postgreURL, false)
@@ -68,7 +102,7 @@ func (s *Snap) Wait() error {
 
 func (s *Snap) WaitFor(d time.Duration) error {
 	if s.writeMode {
-		s.done <- struct{}{}
+		close(s.done)
 	}
 
 	select {

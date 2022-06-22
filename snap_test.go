@@ -21,35 +21,24 @@ func init() {
 	}
 }
 
-func TestSnap_runScript_pq(t *testing.T) {
-	s := NewSnap(t, addr)
-	defer s.Finish()
+func TestPQ(t *testing.T) {
+	a := run(t, addr, false)
+	runPQ(t, a.Addr())
+	a.Finish()
 
-	runPQ(t, s.Addr())
+	b := run(t, addr, true)
+	runPQ(t, b.Addr())
+	b.Finish()
 }
 
-func TestSnap_runScript_pgx(t *testing.T) {
-	s := NewSnap(t, addr)
-	defer s.Finish()
+func TestPGX(t *testing.T) {
+	a := run(t, addr, false)
+	runPGX(t, a.Addr())
+	a.Finish()
 
-	runPGX(t, s.Addr())
-}
-
-func TestSnap_runProxy_pq(t *testing.T) {
-	s := NewSnapWithForceWrite(t, addr, true)
-	defer s.Finish()
-
-	runPQ(t, s.Addr())
-}
-
-func TestSnap_runEmptyScript(t *testing.T) {
-	s := NewSnap(t, addr)
-	defer s.Finish()
-
-	runPQ(t, s.Addr())
-
-	// revert to empty file again
-	os.WriteFile("TestSnap_runEmptyScript.txt", []byte(""), os.ModePerm)
+	b := run(t, addr, true)
+	runPGX(t, b.Addr())
+	b.Finish()
 }
 
 func runPQ(t *testing.T, addr string) {

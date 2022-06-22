@@ -107,19 +107,24 @@ func (s *Snap) readScript(f *os.File) *pgmock.Script {
 
 	for scanner.Scan() {
 		b := scanner.Bytes()
-		msg := s.unmarshal(b)
+		msg, err := s.unmarshal(b)
+		if err != nil {
+			s.t.Fatalf("script read error: %s", err)
+		}
 		script.Append(msg)
 	}
 
 	return script
 }
 
-func (s *Snap) unmarshal(src []byte) pgproto3.Message {
+func (s *Snap) unmarshal(src []byte) (pgproto3.Message, error) {
 	t := struct {
 		Type string
 	}{}
 
-	json.Unmarshal(src, &t)
+	if err := json.Unmarshal(src, &t); err != nil {
+		return nil, err
+	}
 
 	var o pgproto3.Message
 
@@ -166,7 +171,6 @@ func (s *Snap) unmarshal(src []byte) pgproto3.Message {
 		panic("unknown type: " + t.Type)
 	}
 
-	_ = json.Unmarshal(src, o)
-
-	return o
+	err := json.Unmarshal(src, o)
+	return o, err
 }

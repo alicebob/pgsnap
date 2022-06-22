@@ -4,7 +4,6 @@ test: clean
 
 clean:
 	rm -f *.txt
-	
 
 tidy:
 	go mod tidy
