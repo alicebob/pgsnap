@@ -2,7 +2,6 @@ package pgsnap
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -189,12 +188,9 @@ func errCmp(t testing.TB, errReal, errSnap error) {
 }
 
 func connect(t *testing.T, replay bool) *pgx.Conn {
-	fmt.Printf("run snap on %s\n", addr)
-	s := NewSnapWithForceWrite(t, addr, !replay)
-	t.Cleanup(s.Finish)
+	a := Run(t, addr, replay)
 
-	fmt.Printf("connect to snap on %s\n", s.Addr())
-	db, err := pgx.Connect(context.Background(), s.Addr())
+	db, err := pgx.Connect(context.Background(), a)
 	require.NoError(t, err)
 	return db
 }

@@ -28,17 +28,14 @@ func (s *Script) Run(b *pgproto3.Backend) error {
 		return err
 	}
 
-	for i, step := range s.Steps {
-		fmt.Printf("run step %d: %T\n", i, step)
+	for _, step := range s.Steps {
 		if cmd, ok := step.(pgproto3.BackendMessage); ok {
-			// todo: add name mapping
 			if err := s.SendReply(b, cmd); err != nil {
 				return err
 			}
 			continue
 		}
 		if cmd, ok := step.(pgproto3.FrontendMessage); ok {
-			// todo: add name mapping
 			if err := s.ReadMessage(b, cmd); err != nil {
 				return err
 			}
@@ -56,7 +53,6 @@ func (s *Script) SendReply(b *pgproto3.Backend, msg pgproto3.BackendMessage) err
 
 func (s *Script) ReadMessage(b *pgproto3.Backend, want pgproto3.FrontendMessage) error {
 	msg, err := b.Receive()
-	fmt.Printf("read from client: %T (%s)\n", msg, err)
 	if err != nil {
 		return err
 	}
@@ -68,7 +64,6 @@ func (s *Script) ReadMessage(b *pgproto3.Backend, want pgproto3.FrontendMessage)
 	if q, ok := msg.(*pgproto3.Parse); ok {
 		live := q.Name
 		if live != "" {
-			fmt.Printf("parse with name: %q\n", live)
 			if wq, ok := want.(*pgproto3.Parse); ok {
 				stored := wq.Name
 				s.Prepared[live] = stored
@@ -80,7 +75,7 @@ func (s *Script) ReadMessage(b *pgproto3.Backend, want pgproto3.FrontendMessage)
 	if q, ok := msg.(*pgproto3.Describe); ok {
 		live := q.Name
 		if live != "" {
-			fmt.Printf("describe with name: %q -> %q\n", live, s.Prepared[live])
+			// fmt.Printf("describe with name: %q -> %q\n", live, s.Prepared[live])
 			q.Name = s.Prepared[live]
 			msg = q
 		}
@@ -88,7 +83,7 @@ func (s *Script) ReadMessage(b *pgproto3.Backend, want pgproto3.FrontendMessage)
 	if q, ok := msg.(*pgproto3.Bind); ok {
 		live := q.PreparedStatement
 		if live != "" {
-			fmt.Printf("bind with name: %q -> %q\n", live, s.Prepared[live])
+			// fmt.Printf("bind with name: %q -> %q\n", live, s.Prepared[live])
 			q.PreparedStatement = s.Prepared[live]
 			msg = q
 		}

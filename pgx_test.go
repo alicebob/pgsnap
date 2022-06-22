@@ -19,7 +19,7 @@ func TestExec(t *testing.T) {
 
 	t.Skip("fixme")
 	t.Run("errors", runCmpT(func(t *T, c *pgx.Conn) {
-		t.CompareExecErr(c, "SELECT")
+		t.CompareExecErr(c, "SELECT foo")
 		t.CompareExecErr(c, "SELECT 1/0")
 	}))
 }
