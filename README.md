@@ -1,12 +1,10 @@
 # pgsnap
-Fake PostgreSQL proxy for unit testing
+PostgreSQL replay for unit testing. This library records the PG traffic generated in a test, and can replay the traffic next time you run the test, which saves you running a real PG (and it might also be much faster).
 
 
 This code comes originally from https://github.com/egon12/pgsnap, but diverged.
 
 ## Getting Started
-
-You can download the library in by typing this command
 
 ```go
 package db
@@ -35,7 +33,7 @@ func TestDB_GetProduct(t *testing.T) {
 
 ```
 
-Run this during development with your local postgres, and with `go test`. Commit the .txt files. During CI, or similar situations, you can use the replay when running: `PGREPLAY=1 go test`.
+Run this during development with your local postgres, and with `go test`. The traffic will be stored in .txt files. Do commit the .txt files. During CI, or similar situations, you can use the replay when running: `PGREPLAY=1 go test`.
 
 
 ## Why we need this?
@@ -50,12 +48,7 @@ with snapshot that we have.
 
 
 ## How does it work?
-When we create pgsnap, we will create a postgresql proxy, that will be used to get message that 
-send/receive between app and postgres. At first run, or when we don't have the snapshot file,
-it will create the snapshot file and save it.
-
-At the second run the proxy would not connect to the real postgres server, and instead read
-the snapshot file and response accordingly to the app.
+In a normal test run pgsnap we will create a postgresql proxy, that will be used to record the postgres requests and responses and stores it in a .txt file. If you run the test with `PGREPLAY=1` set in the environment pgsnap will create a fake postgres server, and replay the recorded traffic, erroring if it gets something unexpected. There is no need to have a real postgres around anymore in replay mode.
 
 ### First run
 ```mermaid
@@ -76,7 +69,7 @@ graph LR
     
 ```
 
-### Known Bugs
+### Known bugs and limitations
 
 Inserting values which are different every run won't work. For example `time.Now()` will not work, since it's different every time, which defeats the whole idea of this package. If you need a timestamp, and you can't use PG`s `NOW()` or similar, use a fixed Go time value (`time.Date(2022, 5, 4, ...)`).
 
