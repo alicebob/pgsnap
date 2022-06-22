@@ -102,7 +102,7 @@ func (s *Script) ReadMessage(b *pgproto3.Backend, want pgproto3.FrontendMessage)
 	// }
 
 	if !reflect.DeepEqual(msg, want) {
-		return fmt.Errorf("msg => %#v, want => %#v", msg, want)
+		return fmt.Errorf("msg  => %#s\nwant => %#s", msg, want)
 	}
 
 	return nil

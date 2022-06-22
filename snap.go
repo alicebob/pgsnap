@@ -103,7 +103,7 @@ func (s *Snap) getFilename() string {
 	return "pgsnap_" + n + ".txt"
 }
 
-func (s *Snap) listen() net.Listener {
+func (s *Snap) listen() {
 	var err error
 
 	s.l, err = net.Listen("tcp", "127.0.0.1:")
@@ -112,6 +112,4 @@ func (s *Snap) listen() net.Listener {
 	}
 
 	s.addr = fmt.Sprintf("postgres://user@%s/?sslmode=disable", s.l.Addr())
-
-	return s.l
 }
