@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -42,10 +43,10 @@ func NewSnapWithForceWrite(t *testing.T, url string, forceWrite bool) *Snap {
 	}
 
 	if err != nil {
-		s.t.Fatalf("can't open file \"%s\": %v", s.getFilename(), err)
+		s.t.Fatalf("can't open file %q: %s", s.getFilename(), err)
 	}
 
-	s.runFakePostgre(script)
+	s.runFakePostgres(script)
 	return s
 }
 
@@ -85,7 +86,9 @@ func (s *Snap) getFile() (*os.File, error) {
 }
 
 func (s *Snap) getFilename() string {
-	return s.t.Name() + ".txt"
+	n := s.t.Name() + ".txt"
+	n = strings.ReplaceAll(n, "/", "__")
+	return n
 }
 
 func (s *Snap) listen() net.Listener {

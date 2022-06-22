@@ -54,10 +54,9 @@ func (s *Snap) streamBEtoFE(fe *pgproto3.Frontend, be *pgproto3.Backend, out io.
 			continue
 		}
 
-		out.Write([]byte("\nF "))
-
 		b, _ := json.Marshal(msg)
 		out.Write(b)
+		out.Write([]byte("\n"))
 
 		if msg != nil {
 			fe.Send(msg)
@@ -73,10 +72,9 @@ func (s *Snap) streamFEtoBE(fe *pgproto3.Frontend, be *pgproto3.Backend, out io.
 			continue
 		}
 
-		out.Write([]byte("\nB "))
-
 		b, _ := json.Marshal(msg)
 		out.Write(b)
+		out.Write([]byte("\n"))
 
 		if msg != nil {
 			be.Send(msg)

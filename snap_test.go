@@ -12,7 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const addr = "postgres://postgres@127.0.0.1:15432/?sslmode=disable"
+var addr = "postgres://postgres@127.0.0.1:15432/?sslmode=disable"
+
+func init() {
+	// set PGSNAPURL to override the postgres test address
+	if a := os.Getenv("PGSNAPURL"); a != "" {
+		addr = a
+	}
+}
 
 func TestSnap_runScript_pq(t *testing.T) {
 	s := NewSnap(t, addr)
@@ -79,11 +86,11 @@ func Test_getFilename(t *testing.T) {
 
 	t.Run("another test name", func(t *testing.T) {
 		s = &Snap{t: t}
-		assert.Equal(t, "Test_getFilename/another_test_name.txt", s.getFilename())
+		assert.Equal(t, "Test_getFilename__another_test_name.txt", s.getFilename())
 	})
 
 	t.Run("what about this one?", func(t *testing.T) {
 		s = &Snap{t: t}
-		assert.Equal(t, "Test_getFilename/what_about_this_one?.txt", s.getFilename())
+		assert.Equal(t, "Test_getFilename__what_about_this_one?.txt", s.getFilename())
 	})
 }

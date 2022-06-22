@@ -72,14 +72,10 @@ graph LR
 ```mermaid
 graph LR
 
-    TestApp --> pgsnap.Proxy --> snapshot_file
+    TestApp --> pgsnap.Proxy
     snapshot_file --> pgsnap.Proxy --> TestApp
     
 ```
 
 ### Known Bugs
-For now, we only support `github.com/lib/pq`. This caused by different implementation in 
-creating transaction statement. In `lib/pq` transaction is not named. But in jackc/pgx,
-the transaction is named by incremental singleton value. So there are possibility 
-first run and second run have different value. Depends on how many query already run 
-in the test process.
+Inserting values which are different every run won't work. For example `time.Now()` will not work, since it's different every time, which defeats the whole idea of this package. If you need a timestamp, and you can't use PG`s `NOW()` or similar, use a fixed Go time value (`time.Date(2022, 5, 4, ...)`).
