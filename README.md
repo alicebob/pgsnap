@@ -71,7 +71,8 @@ graph LR
 
 ### Known bugs and limitations
 
-Inserting values which are different every run won't work. For example `time.Now()` will not work, since it's different every time, which defeats the whole idea of this package. If you need a timestamp, and you can't use PG`s `NOW()` or similar, use a fixed Go time value (`time.Date(2022, 5, 4, ...)`).
+Inserting values which are different every run won't work. For example `time.Now()` will not work, since it's different every time, which defeats the whole idea of this package.  
+If you need a timestamp, and you can't use PG's `NOW()` or similar, use a fixed Go time value (`time.Date(2022, 5, 4, ...)`).  
 For UUIDs you can seed the randomness in test. For example with github.com/google/uuid you can call: `uuid.SetRand(bytes.NewBufferString("helloworld1231231231231312312331"))`.
 
 The .txt files which store the commands are named after the test name. Don't run multiple pgsnap in the same test (subtests are OK).
