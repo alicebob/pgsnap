@@ -51,7 +51,7 @@ func run(t *testing.T, postgreURL string, replay bool) *Snap {
 		}
 		s.runFakePostgres(script)
 	} else {
-		s.runProxy(postgreURL)
+		go s.runProxy(postgreURL)
 	}
 	return s
 }
@@ -88,7 +88,11 @@ func (s *Snap) getFile() (*os.File, error) {
 }
 
 func (s *Snap) getFilename() string {
-	n := s.t.Name()
+	return getFilename(s.t)
+}
+
+func getFilename(t *testing.T) string {
+	n := t.Name()
 	n = strings.TrimPrefix(n, "Test")
 	n = strings.ReplaceAll(n, "/", "__")
 	n = strings.Map(func(r rune) rune {

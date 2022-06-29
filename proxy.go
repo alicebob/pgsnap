@@ -2,10 +2,7 @@ package pgsnap
 
 import (
 	"context"
-	"encoding/json"
-	"io"
 	"net"
-	"os"
 
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/v4"
@@ -14,71 +11,57 @@ import (
 func (s *Snap) runProxy(url string) {
 	s.writeMode = true
 
-	out, err := os.Create(s.getFilename())
-	if err != nil {
-		s.t.Fatalf("can't create file %s: %v", s.getFilename(), err)
-	}
+	disk := newDisk(s.t)
+	defer disk.Close()
 
-	db, err := pgx.Connect(context.TODO(), url)
+	db, err := pgx.Connect(context.Background(), url)
 	if err != nil {
 		s.t.Fatalf("can't connect to db %s: %v", url, err)
 	}
 
-	go s.acceptConnForProxy(db, out)
+	for {
+		conn, err := s.l.Accept()
+		if err != nil {
+			s.errchan <- err
+			break
+		}
+		f := disk.newWriter()
+		defer close(f) // fixme: do this nicer
+		go s.acceptConnForProxy(db, f, conn)
+	}
 }
 
-func (s *Snap) acceptConnForProxy(db *pgx.Conn, out io.Writer) {
-	conn, err := s.l.Accept()
-	if err != nil {
-		s.errchan <- err
-		return
-	}
-
+func (s *Snap) acceptConnForProxy(db *pgx.Conn, out chan<- pgproto3.Message, conn net.Conn) {
 	be := s.prepareBackend(conn)
-
 	fe := s.prepareFrontend(db)
-
 	s.runConversation(fe, be, out)
 }
 
-func (s *Snap) runConversation(fe *pgproto3.Frontend, be *pgproto3.Backend, out io.Writer) {
+func (s *Snap) runConversation(fe *pgproto3.Frontend, be *pgproto3.Backend, out chan<- pgproto3.Message) {
+	// TODO: deal with error
 	go s.streamBEtoFE(fe, be, out)
 	go s.streamFEtoBE(fe, be, out)
 }
 
-func (s *Snap) streamBEtoFE(fe *pgproto3.Frontend, be *pgproto3.Backend, out io.Writer) {
+func (s *Snap) streamBEtoFE(fe *pgproto3.Frontend, be *pgproto3.Backend, out chan<- pgproto3.Message) error {
 	for {
 		msg, err := be.Receive()
 		if err != nil {
-			s.errchan <- err
-			continue
+			return err
 		}
-
-		b, _ := json.Marshal(msg)
-		out.Write(b)
-		out.Write([]byte("\n"))
-
-		if msg != nil {
-			fe.Send(msg)
-		}
+		out <- msg
+		fe.Send(msg)
 	}
 }
 
-func (s *Snap) streamFEtoBE(fe *pgproto3.Frontend, be *pgproto3.Backend, out io.Writer) {
+func (s *Snap) streamFEtoBE(fe *pgproto3.Frontend, be *pgproto3.Backend, out chan<- pgproto3.Message) error {
 	for {
 		msg, err := fe.Receive()
 		if err != nil {
-			s.errchan <- err
-			continue
+			return err
 		}
-
-		b, _ := json.Marshal(msg)
-		out.Write(b)
-		out.Write([]byte("\n"))
-
-		if msg != nil {
-			be.Send(msg)
-		}
+		out <- msg
+		be.Send(msg)
 	}
 }
 
