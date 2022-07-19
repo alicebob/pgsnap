@@ -1,6 +1,7 @@
 package pgsnap
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -12,67 +13,92 @@ import (
 )
 
 type Snap struct {
-	t         *testing.T
-	addr      string
-	errchan   chan error
-	msgchan   chan string
-	done      chan struct{}
-	writeMode bool
-	l         net.Listener
+	t       *testing.T
+	addr    string
+	errchan chan error
+	cancel  func()
+	done    chan struct{} // FIXME: drop
+	l       net.Listener
 }
 
 // run and stop-on-cleanup.
 // If "replay" is true this will use the local replay files (and fail if there are none), otherwise it'll connect to the postgres URL.
-func Run(t *testing.T, postgreURL string, replay bool) string {
-	s := run(t, postgreURL, replay)
+func Run(ctx context.Context, t *testing.T, postgresURL string, replay bool) string {
+	s := run(ctx, t, postgresURL, replay)
+	t.Helper()
 	t.Cleanup(s.Finish)
 	return s.Addr()
 }
 
 // Same as Run(), but does replay if, and only if, PGREPLAY is set in ENV (anything non-empty)
 // This is the recommended function to use.
-func RunEnv(t *testing.T, postgreURL string) string {
+// TODO: get url from ENV as well
+func RunEnv(t *testing.T, postgresURL string) string {
+	ctx := context.Background()
 	replay := os.Getenv("PGREPLAY") != ""
-	return Run(t, postgreURL, replay)
+	t.Helper()
+	return Run(ctx, t, postgresURL, replay)
 }
 
-func run(t *testing.T, postgreURL string, replay bool) *Snap {
+func run(ctx context.Context, t *testing.T, postgresURL string, replay bool) *Snap {
+	ctx, cancel := context.WithCancel(ctx)
+
 	s := &Snap{
 		t:       t,
-		errchan: make(chan error, 1),
-		msgchan: make(chan string, 1),
+		errchan: make(chan error, 2),
 		done:    make(chan struct{}),
+		cancel:  cancel,
 	}
+
 	s.listen()
 	if replay {
 		script, err := s.getScript()
 		if err != nil {
 			t.Fatal(err)
 		}
-		s.runFakePostgres(script)
-	} else {
-		go s.runProxy(postgreURL)
+		s.runFakePostgres(ctx, script)
+		close(s.done)
+		return s
 	}
-	return s
-}
 
-func (s *Snap) Finish() {
-	err := s.WaitFor(5 * time.Second)
+	p, err := s.startProxy(ctx, postgresURL)
 	if err != nil {
-		s.t.Helper()
-		s.t.Error(err)
+		t.Fatalf("pgsnap: %s", err)
 	}
+	go func() {
+		rw := NewReplayWriter()
+		if err := p.run(ctx, rw, s.l); err != nil {
+			fmt.Printf("runProxy res: %s\n", err)
+			// can't Fatal() in a go routine
+			t.Errorf("pgsnap: %s", err)
+			s.errchan <- err
+			return
+		}
+		if err := rw.WriteFile(s.getFilename()); err != nil {
+			s.errchan <- err
+			return
+		}
+		close(s.done) // fixme: simply close errchan
+	}()
+	return s
 }
 
 func (s *Snap) Addr() string {
 	return s.addr
 }
 
-func (s *Snap) WaitFor(d time.Duration) error {
-	if s.writeMode {
-		close(s.done)
-	}
+func (s *Snap) Finish() {
+	s.l.Close()
+	s.cancel()
 
+	err := s.waitFor(5 * time.Second)
+	if err != nil {
+		s.t.Helper()
+		s.t.Error(err)
+	}
+}
+
+func (s *Snap) waitFor(d time.Duration) error {
 	select {
 	case <-time.After(d):
 		return errors.New("pgsnap timeout")

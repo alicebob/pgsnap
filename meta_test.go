@@ -2,6 +2,7 @@ package pgsnap
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -22,16 +23,18 @@ type Queryer interface {
 func runCmpT(cb func(t *T, c *pgx.Conn)) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
-
 		tt := &T{T: t}
-		// main connections
-		real := connect(t, false)
+
+		fmt.Printf("hello\n")
+
 		// tt.Log("running against real")
+		real := connect(t, false)
 		cb(tt, real)
+		real.Close(context.Background())
 
 		// tt.Log("running against snap")
-		snap := connect(t, true)
 		tt.replayMode = true
+		snap := connect(t, true)
 		cb(tt, snap)
 	}
 }
@@ -188,9 +191,10 @@ func errCmp(t testing.TB, errReal, errSnap error) {
 }
 
 func connect(t *testing.T, replay bool) *pgx.Conn {
-	a := Run(t, addr, replay)
+	ctx := context.Background()
+	a := Run(ctx, t, addr, replay)
 
-	db, err := pgx.Connect(context.Background(), a)
+	db, err := pgx.Connect(ctx, a)
 	require.NoError(t, err)
 	return db
 }

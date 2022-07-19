@@ -1,60 +1,151 @@
 package pgsnap
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"sync"
-	"testing"
 
 	"github.com/jackc/pgproto3/v2"
+
+	"github.com/alicebob/pgsnap/pgmock"
 )
 
-type Packet struct {
-	ConnID int              `json:"connId"`
-	Packet pgproto3.Message `json:"packet"`
+type RWriter struct {
+	buf *bytes.Buffer
+	enc *json.Encoder
+	mu  sync.Mutex
 }
 
-type Disk struct {
-	conns int
-	f     *os.File
-	enc   *json.Encoder
-	mu    sync.Mutex
+// A ReplayWriter writes packets to a buffer.
+func NewReplayWriter() *RWriter {
+	b := &bytes.Buffer{}
+	enc := json.NewEncoder(b)
+	return &RWriter{
+		buf: b,
+		enc: enc,
+	}
 }
 
-func openWriter(t *testing.T) *Disk {
-	file := getFilename(t)
-	f, err := os.Create(file)
+func (rw *RWriter) Add(p pgproto3.Message) {
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+
+	// pgx has a habit of reusing structs, so we have to encode now.
+	rw.enc.Encode(p)
+}
+
+func (rw *RWriter) WriteFile(name string) error {
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+
+	return os.WriteFile(name, rw.buf.Bytes(), 0600)
+}
+
+// given two replays, say if these are "functional" the same thing.
+// Used to avoid rewriting a file if only "local" things changed (OIDs)
+func (rw *RWriter) Equivalent(r2 *Replay) bool {
+	// TODO
+	return false
+}
+
+type Replay struct {
+	packets []pgproto3.Message
+	mu      sync.Mutex
+}
+
+// Read stored replay. Will return <some error> if the file doesn't exists.
+func ReadReplay(name string) (*Replay, error) {
+	f, err := os.Open(name)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	return &Disk{
-		f:   f,
-		enc: json.NewEncoder(f),
-	}
-}
+	defer f.Close()
 
-func (d *Disk) Close() {
-	d.f.Close()
-}
-
-// new connection gets a new channel. Close the returned channel when done.
-func (d *Disk) newWriter() chan<- pgproto3.Message {
-	d.mu.Lock()
-	d.conns++
-	connID := d.conns
-	d.mu.Unlock()
-
-	msgs := make(chan pgproto3.Message)
-	go func() {
-		for msg := range msgs {
-			d.mu.Lock()
-			d.enc.Encode(Packet{ConnID: connID, Packet: msg})
-			d.mu.Unlock()
+	r := &Replay{}
+	dec := json.NewDecoder(f)
+	for {
+		var raw json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			if errors.Is(err, io.EOF) {
+				return r, nil
+			}
+			return r, err
 		}
-	}()
-	return msgs
+		p, err := unmarshal(raw)
+		if err != nil {
+			return r, err
+		}
+		r.packets = append(r.packets, p)
+	}
 }
 
-//
-func (d *Disk) newReader() <-chan pgproto3.Message {
+func (r *Replay) AsMock() *pgmock.Script {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	s := pgmock.NewScript()
+	for _, p := range r.packets {
+		s.Append(p)
+	}
+	return s
+}
+
+func unmarshal(src []byte) (pgproto3.Message, error) {
+	t := struct {
+		Type string
+	}{}
+	if err := json.Unmarshal(src, &t); err != nil {
+		return nil, err
+	}
+
+	var o pgproto3.Message
+
+	switch t.Type {
+	// case "AuthenticationOK":
+	// o = &pgproto3.AuthenticationOk{}
+	// case "BackendKeyData":
+	// o = &pgproto3.BackendKeyData{}
+	case "ParseComplete":
+		o = &pgproto3.ParseComplete{}
+	case "ParameterDescription":
+		o = &pgproto3.ParameterDescription{}
+	case "RowDescription":
+		o = &pgproto3.RowDescription{}
+	case "ReadyForQuery":
+		o = &pgproto3.ReadyForQuery{}
+	case "BindComplete":
+		o = &pgproto3.BindComplete{}
+	case "DataRow":
+		o = &pgproto3.DataRow{}
+	case "CommandComplete":
+		o = &pgproto3.CommandComplete{}
+	case "EmptyQueryResponse":
+		o = &pgproto3.EmptyQueryResponse{}
+	case "NoData":
+		o = &pgproto3.NoData{}
+	// case "StartupMessage":
+	// o = &pgproto3.StartupMessage{}
+	case "Parse":
+		o = &pgproto3.Parse{}
+	case "Query":
+		o = &pgproto3.Query{}
+	case "Describe":
+		o = &pgproto3.Describe{}
+	case "Sync":
+		o = &pgproto3.Sync{}
+	case "Bind":
+		o = &pgproto3.Bind{}
+	case "Execute":
+		o = &pgproto3.Execute{}
+	case "Terminate":
+		o = &pgproto3.Terminate{}
+	default:
+		panic("unknown type: " + t.Type)
+	}
+
+	err := json.Unmarshal(src, o)
+	return o, err
 }

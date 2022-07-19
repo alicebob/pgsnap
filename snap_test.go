@@ -3,6 +3,7 @@ package pgsnap
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"testing"
 
@@ -22,21 +23,25 @@ func init() {
 }
 
 func TestPQ(t *testing.T) {
-	a := run(t, addr, false)
+	ctx := context.Background()
+
+	a := run(ctx, t, addr, false)
 	runPQ(t, a.Addr())
 	a.Finish()
 
-	b := run(t, addr, true)
+	b := run(ctx, t, addr, true)
 	runPQ(t, b.Addr())
 	b.Finish()
 }
 
 func TestPGX(t *testing.T) {
-	a := run(t, addr, false)
+	ctx := context.Background()
+
+	a := run(ctx, t, addr, false)
 	runPGX(t, a.Addr())
 	a.Finish()
 
-	b := run(t, addr, true)
+	b := run(ctx, t, addr, true)
 	runPGX(t, b.Addr())
 	b.Finish()
 }
@@ -58,15 +63,21 @@ func runPQ(t *testing.T, addr string) {
 
 func runPGX(t *testing.T, addr string) {
 	t.Helper()
+	ctx := context.Background()
 
-	db, err := pgx.Connect(context.TODO(), addr)
+	fmt.Printf("pgx connect\n")
+	db, err := pgx.Connect(ctx, addr)
 	require.NoError(t, err)
 
-	err = db.Ping(context.TODO())
+	fmt.Printf("pgx ping\n")
+	require.NoError(t, db.Ping(ctx))
+
+	fmt.Printf("pgx query\n")
+	_, err = db.Query(ctx, "select id from mytable limit $1", 7)
 	require.NoError(t, err)
 
-	_, err = db.Query(context.TODO(), "select id from mytable limit  $1", 7)
-	require.NoError(t, err)
+	fmt.Printf("pgx close\n")
+	require.NoError(t, db.Close(ctx))
 }
 
 func Test_getFilename(t *testing.T) {

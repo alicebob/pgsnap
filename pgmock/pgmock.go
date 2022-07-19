@@ -41,7 +41,7 @@ func (s *Script) Run(b *pgproto3.Backend) error {
 			}
 			continue
 		}
-		fmt.Printf("unhandled message type...\n")
+		panic(fmt.Sprintf("unhandled message type %T. fixme!", step))
 	}
 
 	return nil
@@ -57,9 +57,9 @@ func (s *Script) ReadMessage(b *pgproto3.Backend, want pgproto3.FrontendMessage)
 		return err
 	}
 
-	if _, ok := msg.(*pgproto3.Terminate); ok {
-		return nil
-	}
+	// if _, ok := msg.(*pgproto3.Terminate); ok {
+	// return nil
+	// }
 
 	if q, ok := msg.(*pgproto3.Parse); ok {
 		live := q.Name
@@ -97,12 +97,8 @@ func (s *Script) ReadMessage(b *pgproto3.Backend, want pgproto3.FrontendMessage)
 		want = q
 	}
 
-	// if e.any && reflect.TypeOf(msg) == reflect.TypeOf(e.want) {
-	// return nil
-	// }
-
 	if !reflect.DeepEqual(msg, want) {
-		return fmt.Errorf("msg  => %#s\nwant => %#s", msg, want)
+		return fmt.Errorf("pgsnap:\ngot  => %#v\nwant => %#s\n", msg, want)
 	}
 
 	return nil

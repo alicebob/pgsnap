@@ -2,70 +2,104 @@ package pgsnap
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"sync"
 
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/v4"
 )
 
-func (s *Snap) runProxy(url string) {
-	s.writeMode = true
+type Proxy struct {
+	db *pgx.Conn
+}
 
-	disk := newDisk(s.t)
-	defer disk.Close()
+func (s *Snap) startProxy(ctx context.Context, url string) (*Proxy, error) {
+	fmt.Printf("runProxy!\n")
+	defer fmt.Printf("runProxy done!\n")
 
-	db, err := pgx.Connect(context.Background(), url)
+	db, err := pgx.Connect(ctx, url)
 	if err != nil {
-		s.t.Fatalf("can't connect to db %s: %v", url, err)
+		return nil, fmt.Errorf("can't connect to db %s: %w", url, err)
 	}
 
-	for {
-		conn, err := s.l.Accept()
-		if err != nil {
-			s.errchan <- err
-			break
+	return &Proxy{
+		db: db,
+	}, nil
+}
+
+func (p *Proxy) run(ctx context.Context, rw *RWriter, l net.Listener) error {
+	// we accept a single connection only
+	conn, err := l.Accept()
+	if err != nil {
+		return err
+	}
+
+	beconn := p.db.PgConn().Conn()
+	defer beconn.Close()
+
+	be := p.prepareBackend(conn)
+	fe := p.prepareFrontend(beconn)
+
+	go func() {
+		<-ctx.Done()
+		conn.Close()
+	}()
+
+	// TODO: deal with errors
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		fmt.Printf("start readPostgres\n")
+		defer fmt.Printf("done readPostgres\n")
+		if err := p.readPostgres(fe, be, rw); err != nil {
+			fmt.Printf("readPostgres: %s\n", err)
 		}
-		f := disk.newWriter()
-		defer close(f) // fixme: do this nicer
-		go s.acceptConnForProxy(db, f, conn)
-	}
+		conn.Close()
+		beconn.Close()
+		wg.Done()
+	}()
+	go func() {
+		fmt.Printf("start readClient\n")
+		defer fmt.Printf("done readClient\n")
+		if err := p.readClient(fe, be, rw); err != nil {
+			fmt.Printf("readClient: %s\n", err)
+		}
+		conn.Close()
+		beconn.Close()
+		wg.Done()
+	}()
+	wg.Wait()
+	return nil
 }
 
-func (s *Snap) acceptConnForProxy(db *pgx.Conn, out chan<- pgproto3.Message, conn net.Conn) {
-	be := s.prepareBackend(conn)
-	fe := s.prepareFrontend(db)
-	s.runConversation(fe, be, out)
-}
-
-func (s *Snap) runConversation(fe *pgproto3.Frontend, be *pgproto3.Backend, out chan<- pgproto3.Message) {
-	// TODO: deal with error
-	go s.streamBEtoFE(fe, be, out)
-	go s.streamFEtoBE(fe, be, out)
-}
-
-func (s *Snap) streamBEtoFE(fe *pgproto3.Frontend, be *pgproto3.Backend, out chan<- pgproto3.Message) error {
+func (p *Proxy) readPostgres(fe *pgproto3.Frontend, be *pgproto3.Backend, rw *RWriter) error {
 	for {
 		msg, err := be.Receive()
 		if err != nil {
 			return err
 		}
-		out <- msg
+		rw.Add(msg)
 		fe.Send(msg)
+
+		// if _, ok := msg.(*pgproto3.Terminate); ok {
+		// return nil
+		// }
 	}
 }
 
-func (s *Snap) streamFEtoBE(fe *pgproto3.Frontend, be *pgproto3.Backend, out chan<- pgproto3.Message) error {
+func (p *Proxy) readClient(fe *pgproto3.Frontend, be *pgproto3.Backend, rw *RWriter) error {
 	for {
 		msg, err := fe.Receive()
 		if err != nil {
 			return err
 		}
-		out <- msg
+		rw.Add(msg)
 		be.Send(msg)
 	}
 }
 
-func (s *Snap) prepareBackend(conn net.Conn) *pgproto3.Backend {
+func (p *Proxy) prepareBackend(conn net.Conn) *pgproto3.Backend {
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn)
 
 	// expect startup message
@@ -77,7 +111,6 @@ func (s *Snap) prepareBackend(conn net.Conn) *pgproto3.Backend {
 	return be
 }
 
-func (s *Snap) prepareFrontend(db *pgx.Conn) *pgproto3.Frontend {
-	conn := db.PgConn().Conn()
+func (p *Proxy) prepareFrontend(conn net.Conn) *pgproto3.Frontend {
 	return pgproto3.NewFrontend(pgproto3.NewChunkReader(conn), conn)
 }
