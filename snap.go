@@ -24,7 +24,7 @@ type Snap struct {
 // run and stop-on-cleanup.
 // If "replay" is true this will use the local replay files (and fail if there are none), otherwise it'll connect to the postgres URL.
 func Run(ctx context.Context, t *testing.T, postgresURL string, replay bool) string {
-	s := run(ctx, t, postgresURL, replay)
+	s := NewSnap(ctx, t, postgresURL, replay)
 	t.Helper()
 	t.Cleanup(s.Finish)
 	return s.Addr()
@@ -40,7 +40,8 @@ func RunEnv(t *testing.T, postgresURL string) string {
 	return Run(ctx, t, postgresURL, replay)
 }
 
-func run(ctx context.Context, t *testing.T, postgresURL string, replay bool) *Snap {
+// Manual invocation of snap. Usually you would use RunEnv or Run.
+func NewSnap(ctx context.Context, t *testing.T, postgresURL string, replay bool) *Snap {
 	ctx, cancel := context.WithCancel(ctx)
 
 	s := &Snap{
@@ -88,13 +89,13 @@ func (s *Snap) Addr() string {
 }
 
 func (s *Snap) Finish() {
+	fmt.Printf("start snap Finish\n")
 	s.l.Close()
 	s.cancel()
 
-	err := s.waitFor(5 * time.Second)
-	if err != nil {
+	if err := s.waitFor(5 * time.Second); err != nil {
 		s.t.Helper()
-		s.t.Error(err)
+		s.t.Errorf("pgsnap finish: %s", err)
 	}
 }
 

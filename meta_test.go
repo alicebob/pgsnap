@@ -28,14 +28,17 @@ func runCmpT(cb func(t *T, c *pgx.Conn)) func(t *testing.T) {
 		fmt.Printf("hello\n")
 
 		// tt.Log("running against real")
-		real := connect(t, false)
+		real, s := connect(t, false)
 		cb(tt, real)
 		real.Close(context.Background())
+		s.Finish()
 
 		// tt.Log("running against snap")
 		tt.replayMode = true
-		snap := connect(t, true)
+		snap, s := connect(t, true)
 		cb(tt, snap)
+		snap.Close(context.Background())
+		s.Finish()
 	}
 }
 
@@ -190,11 +193,11 @@ func errCmp(t testing.TB, errReal, errSnap error) {
 	}
 }
 
-func connect(t *testing.T, replay bool) *pgx.Conn {
+func connect(t *testing.T, replay bool) (*pgx.Conn, *Snap) {
 	ctx := context.Background()
-	a := Run(ctx, t, addr, replay)
+	sn := NewSnap(ctx, t, addr, replay)
 
-	db, err := pgx.Connect(ctx, a)
+	db, err := pgx.Connect(ctx, sn.Addr())
 	require.NoError(t, err)
-	return db
+	return db, sn
 }

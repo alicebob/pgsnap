@@ -25,11 +25,11 @@ func init() {
 func TestPQ(t *testing.T) {
 	ctx := context.Background()
 
-	a := run(ctx, t, addr, false)
+	a := NewSnap(ctx, t, addr, false)
 	runPQ(t, a.Addr())
 	a.Finish()
 
-	b := run(ctx, t, addr, true)
+	b := NewSnap(ctx, t, addr, true)
 	runPQ(t, b.Addr())
 	b.Finish()
 }
@@ -37,11 +37,11 @@ func TestPQ(t *testing.T) {
 func TestPGX(t *testing.T) {
 	ctx := context.Background()
 
-	a := run(ctx, t, addr, false)
+	a := NewSnap(ctx, t, addr, false)
 	runPGX(t, a.Addr())
 	a.Finish()
 
-	b := run(ctx, t, addr, true)
+	b := NewSnap(ctx, t, addr, true)
 	runPGX(t, b.Addr())
 	b.Finish()
 }

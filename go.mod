@@ -3,6 +3,7 @@ module github.com/alicebob/pgsnap
 go 1.18
 
 require (
+	github.com/davecgh/go-spew v1.1.1
 	github.com/jackc/pgconn v1.10.0
 	github.com/jackc/pgproto3/v2 v2.1.1
 	github.com/jackc/pgx/v4 v4.13.0
@@ -11,7 +12,6 @@ require (
 )
 
 require (
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

@@ -5,8 +5,15 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/jackc/pgproto3/v2"
 )
+
+func init() {
+	spew.Config.DisablePointerAddresses = true
+	spew.Config.DisableCapacities = true
+	spew.Config.SortKeys = true
+}
 
 type Script struct {
 	Steps    []pgproto3.Message
@@ -98,7 +105,7 @@ func (s *Script) ReadMessage(b *pgproto3.Backend, want pgproto3.FrontendMessage)
 	}
 
 	if !reflect.DeepEqual(msg, want) {
-		return fmt.Errorf("pgsnap:\ngot  => %#v\nwant => %#s\n", msg, want)
+		return fmt.Errorf("pgsnap:\ngot  => %s\nwant => %s\n", spew.Sdump(msg), spew.Sdump(want))
 	}
 
 	return nil
