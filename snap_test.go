@@ -3,7 +3,6 @@ package pgsnap
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"os"
 	"testing"
 
@@ -65,18 +64,14 @@ func runPGX(t *testing.T, addr string) {
 	t.Helper()
 	ctx := context.Background()
 
-	fmt.Printf("pgx connect\n")
 	db, err := pgx.Connect(ctx, addr)
 	require.NoError(t, err)
 
-	fmt.Printf("pgx ping\n")
 	require.NoError(t, db.Ping(ctx))
 
-	fmt.Printf("pgx query\n")
 	_, err = db.Query(ctx, "select id from mytable limit $1", 7)
 	require.NoError(t, err)
 
-	fmt.Printf("pgx close\n")
 	require.NoError(t, db.Close(ctx))
 }
 

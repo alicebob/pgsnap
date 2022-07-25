@@ -2,7 +2,6 @@ package pgsnap
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -24,8 +23,6 @@ func runCmpT(cb func(t *T, c *pgx.Conn)) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
 		tt := &T{T: t}
-
-		fmt.Printf("hello\n")
 
 		// tt.Log("running against real")
 		real, s := connect(t, false)

@@ -10,6 +10,9 @@ import (
 	"testing"
 	"time"
 	"unicode"
+
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 type Snap struct {
@@ -24,23 +27,55 @@ type Snap struct {
 // run and stop-on-cleanup.
 // If "replay" is true this will use the local replay files (and fail if there are none), otherwise it'll connect to the postgres URL.
 func Run(ctx context.Context, t *testing.T, postgresURL string, replay bool) string {
-	s := NewSnap(ctx, t, postgresURL, replay)
 	t.Helper()
+	s := NewSnap(ctx, t, postgresURL, replay)
 	t.Cleanup(s.Finish)
 	return s.Addr()
 }
 
-// Same as Run(), but does replay if, and only if, PGREPLAY is set in ENV (anything non-empty)
+// Same as Run(), but connects to postgres (and writes the .txt files) if, and only if, PGPROXY is set in ENV (anything non-empty)
 // This is the recommended function to use.
-// TODO: get url from ENV as well
-func RunEnv(t *testing.T, postgresURL string) string {
-	ctx := context.Background()
-	replay := os.Getenv("PGREPLAY") != ""
+// Connects to PGURL.
+// .txt file is "pgsnap_[based on test name].txt"
+func RunEnv(t *testing.T) string {
 	t.Helper()
-	return Run(ctx, t, postgresURL, replay)
+	ctx := context.Background()
+
+	proxy := os.Getenv("PGPROXY") != ""
+	return Run(ctx, t, os.Getenv("PGURL"), !proxy)
+}
+
+// Wrapper for RunEnv which returns a pgx.Conn directly.
+func RunEnvPGX(t *testing.T) *pgx.Conn {
+	t.Helper()
+	ctx := context.Background()
+
+	addr := RunEnv(t)
+
+	db, err := pgx.Connect(ctx, addr)
+	if err != nil {
+		t.Fatalf("pg connect: %s", err)
+	}
+	return db
+}
+
+// Wrapper for RunEnv which returns a pgxpool.Pool.
+func RunEnvPGXPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	ctx := context.Background()
+
+	addr := RunEnv(t)
+
+	p, err := pgxpool.Connect(ctx, addr)
+	if err != nil {
+		t.Fatalf("pg connect: %s", err)
+	}
+	// FIXME: set max 1 connection
+	return p
 }
 
 // Manual invocation of snap. Usually you would use RunEnv or Run.
+// See .Addr() and .Finish().
 func NewSnap(ctx context.Context, t *testing.T, postgresURL string, replay bool) *Snap {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -69,7 +104,6 @@ func NewSnap(ctx context.Context, t *testing.T, postgresURL string, replay bool)
 	go func() {
 		rw := NewReplayWriter()
 		if err := p.run(ctx, rw, s.l); err != nil {
-			fmt.Printf("runProxy res: %s\n", err)
 			// can't Fatal() in a go routine
 			t.Errorf("pgsnap: %s", err)
 			s.errchan <- err
@@ -89,7 +123,6 @@ func (s *Snap) Addr() string {
 }
 
 func (s *Snap) Finish() {
-	fmt.Printf("start snap Finish\n")
 	s.l.Close()
 	s.cancel()
 

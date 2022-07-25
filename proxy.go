@@ -15,9 +15,6 @@ type Proxy struct {
 }
 
 func (s *Snap) startProxy(ctx context.Context, url string) (*Proxy, error) {
-	fmt.Printf("runProxy!\n")
-	defer fmt.Printf("runProxy done!\n")
-
 	db, err := pgx.Connect(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("can't connect to db %s: %w", url, err)
@@ -50,20 +47,16 @@ func (p *Proxy) run(ctx context.Context, rw *RWriter, l net.Listener) error {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
-		fmt.Printf("start readPostgres\n")
-		defer fmt.Printf("done readPostgres\n")
-		if err := p.readPostgres(fe, be, rw); err != nil {
-			fmt.Printf("readPostgres: %s\n", err)
+		if err := p.readClient(fe, be, rw); err != nil {
+			fmt.Printf("readClient: %s\n", err)
 		}
 		conn.Close()
 		beconn.Close()
 		wg.Done()
 	}()
 	go func() {
-		fmt.Printf("start readClient\n")
-		defer fmt.Printf("done readClient\n")
-		if err := p.readClient(fe, be, rw); err != nil {
-			fmt.Printf("readClient: %s\n", err)
+		if err := p.readServer(fe, be, rw); err != nil {
+			fmt.Printf("readServer: %s\n", err)
 		}
 		conn.Close()
 		beconn.Close()
@@ -73,27 +66,30 @@ func (p *Proxy) run(ctx context.Context, rw *RWriter, l net.Listener) error {
 	return nil
 }
 
-func (p *Proxy) readPostgres(fe *pgproto3.Frontend, be *pgproto3.Backend, rw *RWriter) error {
+func (p *Proxy) readClient(fe *pgproto3.Frontend, be *pgproto3.Backend, rw *RWriter) error {
 	for {
 		msg, err := be.Receive()
 		if err != nil {
 			return err
 		}
+		if false {
+			fmt.Printf("client->: %T\n", msg)
+			if m, ok := msg.(*pgproto3.Parse); ok {
+				fmt.Printf("          %s\n", m.Query)
+			}
+		}
 		rw.Add(msg)
 		fe.Send(msg)
-
-		// if _, ok := msg.(*pgproto3.Terminate); ok {
-		// return nil
-		// }
 	}
 }
 
-func (p *Proxy) readClient(fe *pgproto3.Frontend, be *pgproto3.Backend, rw *RWriter) error {
+func (p *Proxy) readServer(fe *pgproto3.Frontend, be *pgproto3.Backend, rw *RWriter) error {
 	for {
 		msg, err := fe.Receive()
 		if err != nil {
 			return err
 		}
+		// fmt.Printf("<-server: %T\n", msg)
 		rw.Add(msg)
 		be.Send(msg)
 	}
