@@ -19,20 +19,26 @@ func (s *Snap) getScript() (*pgmock.Script, error) {
 }
 
 func (s *Snap) runFakePostgres(ctx context.Context, script *pgmock.Script) {
-	go s.acceptConnForScript(script)
+	go func() {
+		if err := s.acceptConnForScript(script); err != nil {
+			s.t.Error(err)
+			// fmt.Printf("runFakePostgres: %s\n", err)
+			// s.errchan <- err
+			// close(s.errchan)
+			s.l.Close() // don't accept more connections (for now?)
+		}
+	}()
 }
 
-func (s *Snap) acceptConnForScript(script *pgmock.Script) {
+func (s *Snap) acceptConnForScript(script *pgmock.Script) error {
 	conn, err := s.l.Accept()
 	if err != nil {
-		s.errchan <- err
-		return
+		return err
 	}
 	defer conn.Close()
 
 	if err := conn.SetDeadline(time.Now().Add(time.Second)); err != nil {
-		s.errchan <- err
-		return
+		return err
 	}
 
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn)
@@ -44,9 +50,9 @@ func (s *Snap) acceptConnForScript(script *pgmock.Script) {
 		s.sendError(be, err)
 
 		conn.(*net.TCPConn).SetLinger(0)
-		s.errchan <- err
-		return
+		return err
 	}
+	return nil
 }
 
 func (s *Snap) waitTilSync(be *pgproto3.Backend) {
