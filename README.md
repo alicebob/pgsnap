@@ -1,3 +1,5 @@
+**Status: This kinda works (see also #5), but I don't plan to work on this more.**
+
 # pgsnap
 PostgreSQL replay for unit testing. This library records the PG traffic generated in a test, and can replay the traffic next time you run the test, which saves you running a real PG (and it might also be much faster).
 
