@@ -22,17 +22,20 @@ type Queryer interface {
 func runCmpT(cb func(t *T, c *pgx.Conn)) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
-
 		tt := &T{T: t}
-		// main connections
-		real := connect(t, false)
+
 		// tt.Log("running against real")
+		real, s := connect(t, false)
 		cb(tt, real)
+		real.Close(context.Background())
+		s.Finish()
 
 		// tt.Log("running against snap")
-		snap := connect(t, true)
 		tt.replayMode = true
+		snap, s := connect(t, true)
 		cb(tt, snap)
+		snap.Close(context.Background())
+		s.Finish()
 	}
 }
 
@@ -187,10 +190,11 @@ func errCmp(t testing.TB, errReal, errSnap error) {
 	}
 }
 
-func connect(t *testing.T, replay bool) *pgx.Conn {
-	a := Run(t, addr, replay)
+func connect(t *testing.T, replay bool) (*pgx.Conn, *Snap) {
+	ctx := context.Background()
+	sn := NewSnap(ctx, t, addr, replay)
 
-	db, err := pgx.Connect(context.Background(), a)
+	db, err := pgx.Connect(ctx, sn.Addr())
 	require.NoError(t, err)
-	return db
+	return db, sn
 }

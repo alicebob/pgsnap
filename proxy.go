@@ -2,87 +2,100 @@ package pgsnap
 
 import (
 	"context"
-	"encoding/json"
-	"io"
+	"fmt"
 	"net"
-	"os"
+	"sync"
 
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/v4"
 )
 
-func (s *Snap) runProxy(url string) {
-	s.writeMode = true
-
-	out, err := os.Create(s.getFilename())
-	if err != nil {
-		s.t.Fatalf("can't create file %s: %v", s.getFilename(), err)
-	}
-
-	db, err := pgx.Connect(context.TODO(), url)
-	if err != nil {
-		s.t.Fatalf("can't connect to db %s: %v", url, err)
-	}
-
-	go s.acceptConnForProxy(db, out)
+type Proxy struct {
+	db *pgx.Conn
 }
 
-func (s *Snap) acceptConnForProxy(db *pgx.Conn, out io.Writer) {
-	conn, err := s.l.Accept()
+func (s *Snap) startProxy(ctx context.Context, url string) (*Proxy, error) {
+	db, err := pgx.Connect(ctx, url)
 	if err != nil {
-		s.errchan <- err
-		return
+		return nil, fmt.Errorf("can't connect to db %s: %w", url, err)
 	}
 
-	be := s.prepareBackend(conn)
-
-	fe := s.prepareFrontend(db)
-
-	s.runConversation(fe, be, out)
+	return &Proxy{
+		db: db,
+	}, nil
 }
 
-func (s *Snap) runConversation(fe *pgproto3.Frontend, be *pgproto3.Backend, out io.Writer) {
-	go s.streamBEtoFE(fe, be, out)
-	go s.streamFEtoBE(fe, be, out)
+func (p *Proxy) run(ctx context.Context, rw *RWriter, l net.Listener) error {
+	// we accept a single connection only
+	conn, err := l.Accept()
+	if err != nil {
+		return err
+	}
+
+	beconn := p.db.PgConn().Conn()
+	defer beconn.Close()
+
+	be := p.prepareBackend(conn)
+	fe := p.prepareFrontend(beconn)
+
+	go func() {
+		<-ctx.Done()
+		conn.Close()
+	}()
+
+	// TODO: deal with errors
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		if err := p.readClient(fe, be, rw); err != nil {
+			fmt.Printf("readClient: %s\n", err)
+		}
+		conn.Close()
+		beconn.Close()
+		wg.Done()
+	}()
+	go func() {
+		if err := p.readServer(fe, be, rw); err != nil {
+			fmt.Printf("readServer: %s\n", err)
+		}
+		conn.Close()
+		beconn.Close()
+		wg.Done()
+	}()
+	wg.Wait()
+	return nil
 }
 
-func (s *Snap) streamBEtoFE(fe *pgproto3.Frontend, be *pgproto3.Backend, out io.Writer) {
+func (p *Proxy) readClient(fe *pgproto3.Frontend, be *pgproto3.Backend, rw *RWriter) error {
 	for {
 		msg, err := be.Receive()
 		if err != nil {
-			s.errchan <- err
-			continue
+			return err
 		}
-
-		b, _ := json.Marshal(msg)
-		out.Write(b)
-		out.Write([]byte("\n"))
-
-		if msg != nil {
-			fe.Send(msg)
+		if false {
+			fmt.Printf("client->: %T\n", msg)
+			if m, ok := msg.(*pgproto3.Parse); ok {
+				fmt.Printf("          %s\n", m.Query)
+			}
 		}
+		rw.Add(msg)
+		fe.Send(msg)
 	}
 }
 
-func (s *Snap) streamFEtoBE(fe *pgproto3.Frontend, be *pgproto3.Backend, out io.Writer) {
+func (p *Proxy) readServer(fe *pgproto3.Frontend, be *pgproto3.Backend, rw *RWriter) error {
 	for {
 		msg, err := fe.Receive()
 		if err != nil {
-			s.errchan <- err
-			continue
+			return err
 		}
-
-		b, _ := json.Marshal(msg)
-		out.Write(b)
-		out.Write([]byte("\n"))
-
-		if msg != nil {
-			be.Send(msg)
-		}
+		// fmt.Printf("<-server: %T\n", msg)
+		rw.Add(msg)
+		be.Send(msg)
 	}
 }
 
-func (s *Snap) prepareBackend(conn net.Conn) *pgproto3.Backend {
+func (p *Proxy) prepareBackend(conn net.Conn) *pgproto3.Backend {
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn)
 
 	// expect startup message
@@ -94,7 +107,6 @@ func (s *Snap) prepareBackend(conn net.Conn) *pgproto3.Backend {
 	return be
 }
 
-func (s *Snap) prepareFrontend(db *pgx.Conn) *pgproto3.Frontend {
-	conn := db.PgConn().Conn()
+func (p *Proxy) prepareFrontend(conn net.Conn) *pgproto3.Frontend {
 	return pgproto3.NewFrontend(pgproto3.NewChunkReader(conn), conn)
 }
